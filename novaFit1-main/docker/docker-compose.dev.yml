@@ -1,0 +1,91 @@
+services:
+  novafit-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${NOVA_FIT_DB_NAME:-novafit_db}
+      POSTGRES_USER: ${NOVA_FIT_DB_USER:-nova}
+      POSTGRES_PASSWORD: ${NOVA_FIT_DB_PASSWORD:-changeme_db_password}
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    networks:
+      - novafit-network
+    ports:
+      - "5432:5432" # Expose database port for local development
+
+  novafit-server:
+    build:
+      context: ../NovaFITServer
+      dockerfile: ../docker/Dockerfile.backend
+    environment:
+      NOVA_FIT_LOG_LEVEL: ${NOVA_FIT_LOG_LEVEL:-INFO}
+      NOVA_FIT_DB_USER: ${NOVA_FIT_DB_USER:-nova}
+      NOVA_FIT_DB_HOST: novafit-db
+      NOVA_FIT_DB_NAME: ${NOVA_FIT_DB_NAME:-novafit_db}
+      NOVA_FIT_DB_PASSWORD: ${NOVA_FIT_DB_PASSWORD:-changeme_db_password}
+      NOVA_FIT_DB_PORT: 5432
+      NOVA_FIT_API_ENCRYPTION_KEY: ${NOVA_FIT_API_ENCRYPTION_KEY}
+      # Uncomment the line below and comment the line above to use a file-based secret
+      # NOVA_FIT_API_ENCRYPTION_KEY_FILE: /run/secrets/novafit_api_key
+
+      JWT_SECRET: ${JWT_SECRET}
+      # Uncomment the line below and comment the line above to use a file-based secret
+      # JWT_SECRET_FILE: /run/secrets/novafit_jwt_secret
+      NOVA_FIT_FRONTEND_URL: ${NOVA_FIT_FRONTEND_URL:-http://localhost:8081}
+      NOVA_FIT_DISABLE_SIGNUP: ${NOVA_FIT_DISABLE_SIGNUP:-false}
+      NOVA_FIT_ADMIN_EMAIL: ${NOVA_FIT_ADMIN_EMAIL}
+      NOVA_FIT_FORCE_EMAIL_LOGIN: ${NOVA_FIT_FORCE_EMAIL_LOGIN:-true}
+      NOVA_FIT_EMAIL_HOST: ${NOVA_FIT_EMAIL_HOST}
+      NOVA_FIT_EMAIL_PORT: ${NOVA_FIT_EMAIL_PORT}
+      NOVA_FIT_EMAIL_SECURE: ${NOVA_FIT_EMAIL_SECURE}
+      NOVA_FIT_EMAIL_USER: ${NOVA_FIT_EMAIL_USER}
+      NOVA_FIT_EMAIL_PASS: ${NOVA_FIT_EMAIL_PASS}
+      NOVA_FIT_EMAIL_FROM: ${NOVA_FIT_EMAIL_FROM}
+      NODE_ENV: ${NODE_ENV:-development}
+      GARMIN_MICROSERVICE_URL: http://novafit-garmin:8000 # Add Garmin microservice URL
+    networks:
+      - novafit-network
+    ports:
+      - "3010:3010" # Expose backend port for local development
+    restart: always
+    depends_on:
+      - novafit-db
+    volumes:
+      - ../NovaFITServer:/app/NovaFITServer # Mount source for live reloading
+      - /app/NovaFITServer/node_modules # Preserve node_modules
+      - ./backups:/app/NovaFITServer/backup # Mount volume for backups
+
+  novafit-frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    environment:
+      NOVA_FIT_SERVER_HOST: ${NOVA_FIT_SERVER_HOST:-novafit-server}
+      NOVA_FIT_SERVER_PORT: ${NOVA_FIT_SERVER_PORT:-3010}
+    ports:
+      - "${NOVA_FIT_FRONTEND_PORT:-8081}:80" # Configurable frontend port
+    networks:
+      - novafit-network
+    restart: always
+    depends_on:
+      - novafit-server
+      - novafit-garmin # Frontend depends on Garmin microservice
+
+  novafit-garmin:
+    build:
+      context: ../NovaFITGarmin
+      dockerfile: ../docker/Dockerfile.garmin_microservice
+    environment:
+      GARMIN_MICROSERVICE_URL: http://novafit-garmin:${GARMIN_SERVICE_PORT:-8000}
+      GARMIN_SERVICE_PORT: ${GARMIN_SERVICE_PORT:-8000}
+      GARMIN_SERVICE_IS_CN: ${GARMIN_SERVICE_IS_CN:-false}  # set to true for China region. Everything else should be false. Optional - defaults to false
+    networks:
+      - novafit-network
+    restart: unless-stopped
+    volumes:
+      - ../NovaFITGarmin:/app/NovaFITGarmin # Mount source for live reloading
+      - /app/NovaFITGarmin/venv # Preserve virtual environment
+
+networks:
+  novafit-network:
+    driver: bridge

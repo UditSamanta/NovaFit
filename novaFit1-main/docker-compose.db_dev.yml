@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: novafit_db
+      POSTGRES_USER: nova
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+
+  novafitness-garmin:
+    build:
+      context: ./NovaFITGarmin
+      dockerfile: Dockerfile.garmin_microservice
+    ports:
+      - "8000:8000"
+    environment:
+      GARMIN_MICROSERVICE_URL: http://novafitness-garmin:8000
+    volumes:
+      - ./NovaFITGarmin:/app
+    depends_on:
+      - db

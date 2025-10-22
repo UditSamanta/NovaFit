@@ -1,0 +1,78 @@
+services:
+  novafit-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${NOVA_FIT_DB_NAME}
+      POSTGRES_USER: ${NOVA_FIT_DB_USER}
+      POSTGRES_PASSWORD: ${NOVA_FIT_DB_PASSWORD}
+    volumes:
+      - ../postgresql:/var/lib/postgresql/data
+    networks:
+      - novafit-network # Use the new named network
+
+  novafit-server:
+    image: codewithcj/novafit_server:latest # Use pre-built image
+    environment:
+      NOVA_FIT_LOG_LEVEL: ${NOVA_FIT_LOG_LEVEL}
+      NOVA_FIT_DB_USER: ${NOVA_FIT_DB_USER}
+      NOVA_FIT_DB_HOST: novafit-db # Use the service name 'novafit-db' for inter-container communication
+      NOVA_FIT_DB_NAME: ${NOVA_FIT_DB_NAME}
+      NOVA_FIT_DB_PASSWORD: ${NOVA_FIT_DB_PASSWORD}
+      NOVA_FIT_DB_PORT: 5432
+      NOVA_FIT_API_ENCRYPTION_KEY: ${NOVA_FIT_API_ENCRYPTION_KEY}
+      # Uncomment the line below and comment the line above to use a file-based secret
+      # NOVA_FIT_API_ENCRYPTION_KEY_FILE: /run/secrets/novafit_api_key
+
+      JWT_SECRET: ${JWT_SECRET}
+      # Uncomment the line below and comment the line above to use a file-based secret
+      # JWT_SECRET_FILE: /run/secrets/novafit_jwt_secret
+      NOVA_FIT_FRONTEND_URL: ${NOVA_FIT_FRONTEND_URL}
+      NOVA_FIT_DISABLE_SIGNUP: ${NOVA_FIT_DISABLE_SIGNUP}
+      NOVA_FIT_ADMIN_EMAIL: ${NOVA_FIT_ADMIN_EMAIL}  #User with this email can access the admin panel
+      NOVA_FIT_EMAIL_HOST: ${NOVA_FIT_EMAIL_HOST}
+      NOVA_FIT_EMAIL_PORT: ${NOVA_FIT_EMAIL_PORT}
+      NOVA_FIT_EMAIL_SECURE: ${NOVA_FIT_EMAIL_SECURE}
+      NOVA_FIT_EMAIL_USER: ${NOVA_FIT_EMAIL_USER}
+      NOVA_FIT_EMAIL_PASS: ${NOVA_FIT_EMAIL_PASS}
+      NOVA_FIT_EMAIL_FROM: ${NOVA_FIT_EMAIL_FROM}
+      GARMIN_MICROSERVICE_URL: http://novafit-garmin:8000 # Add Garmin microservice URL
+    networks:
+      - novafit-network # Use the new named network
+    restart: always
+    depends_on:
+      - novafit-db # Backend depends on the database being available
+    volumes:
+      - ./backup:/app/NovaFITServer/backup # Mount volume for backups
+      - ./uploads:/app/NovaFITServer/uploads # Mount volume for Profile pictures and excercise images
+
+
+  novafit-frontend:
+    image: codewithcj/novafit:latest # Use pre-built image
+    ports:
+      - "3004:80" # Map host port 8080 to container port 80 (Nginx)
+    networks:
+      - novafit-network # Use the new named network
+    restart: always
+    depends_on:
+      - novafit-server # Frontend depends on the server
+      #- novafit-garmin # Frontend depends on Garmin microservice. Enable if you are using Garmin Connect features.
+  
+  # Garmin integration is still work in progress. Enable once table is ready.
+  # novafit-garmin:
+  #   image: codewithcj/novafit_garmin:latest
+  #   container_name: novafit-garmin
+  #   environment:
+  #     GARMIN_MICROSERVICE_URL: http://novafit-garmin:${GARMIN_SERVICE_PORT}
+  #     GARMIN_SERVICE_PORT: ${GARMIN_SERVICE_PORT}
+  #     GARMIN_SERVICE_IS_CN: ${GARMIN_SERVICE_IS_CN}  # set to true for China region. Everything else should be false. Optional - defaults to false
+  #   networks:
+  #     - novafit-network
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - novafit-db
+  #     - novafit-server
+
+networks:
+  novafit-network:
+    driver: bridge
